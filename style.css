@@ -1,20 +1,10 @@
 body {
-  margin: 0;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  background: #f0f0f0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-}
-
-.container {
+  font-family: sans-serif;
   text-align: center;
+  background-color: #f0f0f0;
 }
-
-img {
-  width: 400px;
+video {
+  width: 320px;
   border-radius: 10px;
-  margin-bottom: 20px;
+  margin: 20px 0;
 }
