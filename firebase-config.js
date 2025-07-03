@@ -3,12 +3,12 @@ import { getFirestore } from "https://www.gstatic.com/firebasejs/9.6.10/firebase
 import { getStorage } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD1es35wUTftNf4QFSUEWTuK1wFhNWto9Y",
-  authDomain: "study-app-bc550.firebaseapp.com",
-  projectId: "study-app-bc550",
-  storageBucket: "study-app-bc550.firebasestorage.app",
-  messagingSenderId: "354237339048",
-  appId: "1:354237339048:web:e9c36dcda5f768e88a799d",
+  apiKey: "AIzaSyBTVxuS2OkqIOX8j7Hw1QSgAVYZM7L9Yn8",
+  authDomain: "sgram-262d0.firebaseapp.com",
+  projectId: "sgram-262d0",
+  storageBucket: "sgram-262d0.firebasestorage.app",
+  messagingSenderId: "1017138295510",
+  appId: "1:1017138295510:web:dc652f2352ee6a95b5cf77",
 };
 
 const app = initializeApp(firebaseConfig);
